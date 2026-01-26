@@ -19,7 +19,7 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
 └─────────────────────────────────────────────┼───────────────────┘
                                               │
                               ┌───────────────▼───────────────┐
-                              │           Foundry            │
+                              │           Foundry             │
                               │   (Cognitive Services/AI)     │
                               │     + GPT-4o Deployment       │
                               └───────────────────────────────┘
