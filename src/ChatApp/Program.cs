@@ -12,6 +12,9 @@ builder.Services.AddOpenTelemetry().UseAzureMonitor();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Configure chat settings from configuration
+builder.Services.Configure<ChatSettings>(builder.Configuration.GetSection("Chat"));
+
 // Add chat service
 builder.Services.AddSingleton<IChatService, ChatService>();
 

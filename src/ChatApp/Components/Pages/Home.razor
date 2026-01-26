@@ -1,7 +1,10 @@
 @page "/"
 @using ChatApp.Services
+@using ChatApp.Models
 @inject IChatService ChatService
 @inject IJSRuntime JS
+@inject ILogger<Home> Logger
+@implements IDisposable
 
 <PageTitle>Foundry Chat</PageTitle>
 
@@ -155,6 +158,8 @@
 </div>
 
 @code {
+    private readonly string _conversationId = Guid.NewGuid().ToString();
+    private CancellationTokenSource _cts = new();
     private List<ChatMessageViewModel> _messages = new();
     private string _userInput = string.Empty;
     private string? _errorMessage;
@@ -174,20 +179,14 @@
 
     private async Task AutoResizeTextarea()
     {
-        await JS.InvokeVoidAsync("eval", @"
-            (function() {
-                var ta = document.querySelector('.message-input');
-                if (ta) {
-                    var lineBreaks = (ta.value.match(/\n/g) || []).length;
-                    if (lineBreaks > 0 || ta.value.length > 80) {
-                        ta.style.height = 'auto';
-                        ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
-                    } else {
-                        ta.style.height = '';
-                    }
-                }
-            })()
-        ");
+        try
+        {
+            await JS.InvokeVoidAsync("chatInterop.resizeTextarea", ".message-input");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to resize textarea");
+        }
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -207,14 +206,19 @@
 
         try
         {
-            _lastPingMs = await ChatService.PingAsync();
+            _lastPingMs = await ChatService.PingAsync(_cts.Token);
             _pingStatus = "success";
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Health check was cancelled");
         }
         catch (Exception ex)
         {
             _errorMessage = $"Health check failed: {ex.Message}";
             _lastPingMs = null;
             _pingStatus = "failed";
+            Logger.LogWarning(ex, "Health check failed");
         }
         finally
         {
@@ -228,6 +232,7 @@
         _messages.Clear();
         _errorMessage = null;
         _sessionTotalTokens = 0;
+        ChatService.ClearConversation(_conversationId);
         StateHasChanged();
     }
 
@@ -246,33 +251,50 @@
         _userInput = string.Empty;
         _errorMessage = null;
 
-        _messages.Add(new ChatMessageViewModel("user", userMessage, DateTime.Now, null));
+        _messages.Add(new ChatMessageViewModel("user", userMessage, DateTime.UtcNow, null));
         _isLoading = true;
         StateHasChanged();
         await ScrollToBottom();
 
         try
         {
-            var response = await ChatService.SendMessageAsync(userMessage);
+            var response = await ChatService.SendMessageAsync(_conversationId, userMessage, _cts.Token);
             var metrics = new MessageMetrics(
                 response.PromptTokens,
                 response.CompletionTokens,
                 response.TotalTokens,
                 response.ResponseTimeMs
             );
-            _messages.Add(new ChatMessageViewModel("assistant", response.Content, DateTime.Now, metrics));
+            _messages.Add(new ChatMessageViewModel("assistant", response.Content, DateTime.UtcNow, metrics));
             _sessionTotalTokens += response.TotalTokens;
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("Message send was cancelled");
         }
         catch (Exception ex)
         {
             _errorMessage = ex.Message;
+            Logger.LogError(ex, "Failed to send message");
         }
         finally
         {
             _isLoading = false;
             StateHasChanged();
             await ScrollToBottom();
-            await JS.InvokeVoidAsync("eval", "document.querySelector('.message-input').style.height = 'auto'");
+            await ResetTextareaHeight();
+        }
+    }
+
+    private async Task ResetTextareaHeight()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("chatInterop.resetTextareaHeight", ".message-input");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to reset textarea height");
         }
     }
 
@@ -281,11 +303,17 @@
         await Task.Delay(50);
         try
         {
-            await JS.InvokeVoidAsync("eval", "document.querySelector('.messages-container').scrollTop = document.querySelector('.messages-container').scrollHeight");
+            await JS.InvokeVoidAsync("chatInterop.scrollToBottom", ".messages-container");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to scroll to bottom");
+        }
     }
 
-    private record MessageMetrics(int PromptTokens, int CompletionTokens, int TotalTokens, long ResponseTimeMs);
-    private record ChatMessageViewModel(string Role, string Content, DateTime Timestamp, MessageMetrics? Metrics);
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }

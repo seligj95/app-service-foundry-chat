@@ -90,6 +90,7 @@ module appService './modules/app-service.bicep' = {
     applicationInsightsConnectionString: monitoring.outputs.applicationInsightsConnectionString
     aiFoundryEndpoint: aiFoundry.outputs.aiFoundryEndpoint
     aiFoundryId: aiFoundry.outputs.aiFoundryId
+    aiFoundryName: aiFoundry.outputs.aiFoundryName
     modelDeploymentName: modelName
   }
 }

@@ -22,6 +22,9 @@ param aiFoundryEndpoint string
 @description('AI Foundry resource ID for role assignment')
 param aiFoundryId string
 
+@description('AI Foundry resource name for scoped role assignment')
+param aiFoundryName string
+
 @description('Model deployment name')
 param modelDeploymentName string
 
@@ -87,10 +90,15 @@ resource appService 'Microsoft.Web/sites@2024-04-01' = {
   }
 }
 
-// Role Assignment: App Service -> Cognitive Services OpenAI User on AI Foundry
+// Reference existing AI Foundry resource for scoped role assignment
+resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
+  name: aiFoundryName
+}
+
+// Role Assignment: App Service -> Cognitive Services OpenAI User on AI Foundry (scoped to resource)
 resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(aiFoundryId, appService.id, 'Cognitive Services OpenAI User')
-  scope: resourceGroup()
+  scope: aiFoundry
   properties: {
     principalId: appService.identity.principalId
     principalType: 'ServicePrincipal'
