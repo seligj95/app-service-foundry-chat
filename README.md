@@ -1,6 +1,6 @@
-# Azure App Service + AI Foundry Starter Template
+# Azure App Service + Foundry Starter Template
 
-A one-click Azure Developer CLI (azd) template that deploys Azure App Service with Azure AI Foundry, complete with VNet integration, Application Insights, and a Blazor Server chat application for validation.
+A one-click Azure Developer CLI (azd) template that deploys Azure App Service with Foundry, complete with VNet integration, Application Insights, and a Blazor Server chat application for validation.
 
 ## Architecture
 
@@ -13,13 +13,13 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
 │  │                      │    │                              │   │
 │  │  ┌────────────────┐  │    │  ┌────────────────────────┐  │   │
 │  │  │  App Service   │──┼────┼──│  Private Endpoint      │  │   │ 
-│  │  │    (P0v3)      │  │    │  │  (AI Foundry)          │  │   │
+│  │  │    (P0v3)      │  │    │  │  (Foundry)             │  │   │
 │  │  └────────────────┘  │    │  └───────────┬────────────┘  │   │
 │  └──────────────────────┘    └──────────────┼───────────────┘   │
 └─────────────────────────────────────────────┼───────────────────┘
                                               │
                               ┌───────────────▼───────────────┐
-                              │       Azure AI Foundry        │
+                              │           Foundry            │
                               │   (Cognitive Services/AI)     │
                               │     + GPT-4o Deployment       │
                               └───────────────────────────────┘
@@ -28,7 +28,7 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
 ## Features
 
 - **Azure App Service** (P0v3) with .NET 10 and VNet integration
-- **Azure AI Foundry** with private endpoint (no public access)
+- **Foundry** with private endpoint (no public access)
 - **Managed Identity** authentication (keyless)
 - **Application Insights** with auto-instrumentation and OpenTelemetry
 - **Log Analytics** workspace with 30-day retention
@@ -56,7 +56,7 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
    ```bash
    azd show
    ```
-   Click the Web endpoint URL to open the chat app and test your AI Foundry connection.
+   Click the Web endpoint URL to open the chat app and test your Foundry connection.
 
 ## Configuration
 
@@ -88,7 +88,7 @@ azd up
 │   └── modules/
 │       ├── network.bicep       # VNet + subnets
 │       ├── monitoring.bicep    # Log Analytics + App Insights
-│       ├── ai-foundry.bicep    # AI Foundry + PE + diagnostics
+│       ├── ai-foundry.bicep    # Foundry + PE + diagnostics
 │       └── app-service.bicep   # App Service + VNet integration
 └── src/
     └── ChatApp/            # Blazor Server application
@@ -99,7 +99,7 @@ azd up
 
 ## Security
 
-- **Private Networking**: AI Foundry is accessed via private endpoint only
+- **Private Networking**: Foundry is accessed via private endpoint only
 - **Managed Identity**: No API keys stored; App Service authenticates via system-assigned identity
 - **HTTPS Only**: App Service enforces HTTPS
 - **TLS 1.2**: Minimum TLS version enforced
@@ -108,7 +108,7 @@ azd up
 
 Access monitoring data in the Azure Portal:
 - **Application Insights**: Request traces, dependencies, exceptions
-- **Log Analytics**: AI Foundry request/response logs, metrics
+- **Log Analytics**: Foundry request/response logs, metrics
 - **Diagnostic Settings**: Audit logs for all AI operations
 
 ## Cleanup
