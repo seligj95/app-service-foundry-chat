@@ -1,0 +1,11 @@
+{
+  "cognitiveServicesAccounts": "cog-",
+  "insightsComponents": "appi-",
+  "networkPrivateEndpoints": "pep-",
+  "networkPrivateDnsZones": "pdnsz-",
+  "networkVirtualNetworks": "vnet-",
+  "operationalInsightsWorkspaces": "log-",
+  "resourcesResourceGroups": "rg-",
+  "webServerFarms": "plan-",
+  "webSitesAppService": "app-"
+}

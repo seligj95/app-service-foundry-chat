@@ -1,0 +1,269 @@
+@page "/"
+@using ChatApp.Services
+@inject IChatService ChatService
+@inject IJSRuntime JS
+
+<PageTitle>Foundry Chat</PageTitle>
+
+<div class="chat-container">
+    <header class="chat-header">
+        <div class="header-top">
+            <h1>Azure AI Foundry Chat</h1>
+            <div class="header-actions">
+                @if (_messages.Count > 0)
+                {
+                    <button class="clear-btn" @onclick="ClearChat" title="Clear chat">
+                        <span>🗑</span> Clear
+                    </button>
+                }
+            </div>
+        </div>
+        
+        <div class="status-row">
+            <div class="status @(ChatService.IsConfigured ? "connected" : "disconnected")">
+                @if (ChatService.IsConfigured)
+                {
+                    <span>✓ Connected</span>
+                }
+                else
+                {
+                    <span>✗ Not Connected</span>
+                }
+            </div>
+            
+            @if (ChatService.IsConfigured)
+            {
+                <button class="ping-btn @(_isPinging ? "pinging" : "") @(_pingStatus)" @onclick="RunHealthCheck" disabled="@_isPinging">
+                    @if (_isPinging)
+                    {
+                        <span>Testing...</span>
+                    }
+                    else if (_pingStatus == "success")
+                    {
+                        <span>✓ Connected (@(_lastPingMs)ms)</span>
+                    }
+                    else if (_pingStatus == "failed")
+                    {
+                        <span>✗ Failed</span>
+                    }
+                    else
+                    {
+                        <span>🏓 Test Connection</span>
+                    }
+                </button>
+            }
+        </div>
+
+        <div class="service-info">
+            <span class="info-item" title="AI Endpoint">🌐 @_serviceInfo.Endpoint</span>
+            <span class="info-item" title="Model Deployment">🤖 @_serviceInfo.ModelDeployment</span>
+        </div>
+    </header>
+
+    @if (!ChatService.IsConfigured)
+    {
+        <div class="error-banner">
+            <strong>Configuration Error:</strong> @ChatService.ConfigurationError
+        </div>
+    }
+
+    <div class="messages-container" @ref="_messagesContainer">
+        @if (_messages.Count == 0 && ChatService.IsConfigured)
+        {
+            <div class="welcome-message">
+                <div class="welcome-icon">💬</div>
+                <h2>Welcome to Azure AI Foundry Chat</h2>
+                <p>Your connection is ready. Send a message to test the AI service.</p>
+                <div class="quick-prompts">
+                    <button class="quick-prompt" @onclick="@(() => SendQuickPrompt("Hello! Tell me about yourself."))">
+                        👋 Say hello
+                    </button>
+                    <button class="quick-prompt" @onclick="@(() => SendQuickPrompt("What can you help me with?"))">
+                        ❓ What can you do?
+                    </button>
+                    <button class="quick-prompt" @onclick="@(() => SendQuickPrompt("Tell me a short fun fact."))">
+                        🎲 Fun fact
+                    </button>
+                </div>
+            </div>
+        }
+
+        @foreach (var message in _messages)
+        {
+            <div class="message @message.Role">
+                <div class="message-content">
+                    <div class="message-text">@message.Content</div>
+                    @if (message.Role == "assistant" && message.Metrics != null)
+                    {
+                        <div class="message-metrics">
+                            <span>Response: @(message.Metrics.ResponseTimeMs)ms</span>
+                            <span>Tokens: @(message.Metrics.TotalTokens) <span class="token-detail">(@(message.Metrics.PromptTokens) in / @(message.Metrics.CompletionTokens) out)</span></span>
+                        </div>
+                    }
+                    <div class="message-timestamp">@message.Timestamp.ToString("HH:mm:ss")</div>
+                </div>
+            </div>
+        }
+
+        @if (_isLoading)
+        {
+            <div class="message assistant">
+                <div class="message-content">
+                    <div class="message-text loading">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="message error">
+                <div class="message-content">
+                    <strong>Error:</strong> @_errorMessage
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="session-stats">
+        <span>Messages: @_messages.Count</span>
+        <span>Session tokens: @_sessionTotalTokens</span>
+    </div>
+
+    <div class="input-container">
+        <textarea 
+            @bind="_userInput" 
+            @bind:event="oninput"
+            @onkeydown="HandleKeyDown"
+            placeholder="Type a message... (Shift+Enter for new line)" 
+            disabled="@(!ChatService.IsConfigured || _isLoading)"
+            class="message-input"
+            rows="1"></textarea>
+        <button 
+            type="button"
+            @onclick="SendMessage"
+            disabled="@(!ChatService.IsConfigured || _isLoading || string.IsNullOrWhiteSpace(_userInput))"
+            class="send-button">
+            Send
+        </button>
+    </div>
+</div>
+
+@code {
+    private List<ChatMessageViewModel> _messages = new();
+    private string _userInput = string.Empty;
+    private string? _errorMessage;
+    private bool _isLoading;
+    private bool _isPinging;
+    private long? _lastPingMs;
+    private string _pingStatus = ""; // "", "success", "failed"
+    private int _sessionTotalTokens;
+    private ServiceInfo _serviceInfo = new("", "", false, null);
+    private ElementReference _messagesContainer;
+
+    protected override void OnInitialized()
+    {
+        _serviceInfo = ChatService.GetServiceInfo();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !string.IsNullOrWhiteSpace(_userInput))
+        {
+            await SendMessage();
+        }
+    }
+
+    private async Task RunHealthCheck()
+    {
+        _isPinging = true;
+        _pingStatus = "";
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            _lastPingMs = await ChatService.PingAsync();
+            _pingStatus = "success";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Health check failed: {ex.Message}";
+            _lastPingMs = null;
+            _pingStatus = "failed";
+        }
+        finally
+        {
+            _isPinging = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearChat()
+    {
+        _messages.Clear();
+        _errorMessage = null;
+        _sessionTotalTokens = 0;
+        StateHasChanged();
+    }
+
+    private async Task SendQuickPrompt(string prompt)
+    {
+        _userInput = prompt;
+        await SendMessage();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_userInput) || _isLoading)
+            return;
+
+        var userMessage = _userInput.Trim();
+        _userInput = string.Empty;
+        _errorMessage = null;
+
+        _messages.Add(new ChatMessageViewModel("user", userMessage, DateTime.Now, null));
+        _isLoading = true;
+        StateHasChanged();
+        await ScrollToBottom();
+
+        try
+        {
+            var response = await ChatService.SendMessageAsync(userMessage);
+            var metrics = new MessageMetrics(
+                response.PromptTokens,
+                response.CompletionTokens,
+                response.TotalTokens,
+                response.ResponseTimeMs
+            );
+            _messages.Add(new ChatMessageViewModel("assistant", response.Content, DateTime.Now, metrics));
+            _sessionTotalTokens += response.TotalTokens;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+            await ScrollToBottom();
+        }
+    }
+
+    private async Task ScrollToBottom()
+    {
+        await Task.Delay(50);
+        try
+        {
+            await JS.InvokeVoidAsync("eval", "document.querySelector('.messages-container').scrollTop = document.querySelector('.messages-container').scrollHeight");
+        }
+        catch { }
+    }
+
+    private record MessageMetrics(int PromptTokens, int CompletionTokens, int TotalTokens, long ResponseTimeMs);
+    private record ChatMessageViewModel(string Role, string Content, DateTime Timestamp, MessageMetrics? Metrics);
+}

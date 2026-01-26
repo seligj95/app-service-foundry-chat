@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: foundry-chat
+metadata:
+  template: foundry-chat@0.0.1
+
+services:
+  web:
+    project: ./src/ChatApp
+    language: dotnet
+    host: appservice
