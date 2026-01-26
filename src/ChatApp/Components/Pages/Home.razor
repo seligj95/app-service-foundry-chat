@@ -178,8 +178,13 @@
             (function() {
                 var ta = document.querySelector('.message-input');
                 if (ta) {
-                    ta.style.height = 'auto';
-                    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+                    var lineBreaks = (ta.value.match(/\n/g) || []).length;
+                    if (lineBreaks > 0 || ta.value.length > 80) {
+                        ta.style.height = 'auto';
+                        ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+                    } else {
+                        ta.style.height = '';
+                    }
                 }
             })()
         ");
