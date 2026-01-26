@@ -32,7 +32,12 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
 - **Managed Identity** authentication (keyless)
 - **Application Insights** with auto-instrumentation and OpenTelemetry
 - **Log Analytics** workspace with 30-day retention
-- **Blazor Server** chat application for testing connectivity
+- **Blazor Server** chat application with:
+  - Multi-turn conversation history
+  - Configurable system prompt
+  - Token usage metrics per response
+  - Connection health check
+  - Responsive UI with keyboard shortcuts
 
 ## Prerequisites
 
@@ -77,10 +82,29 @@ azd env set MODEL_CAPACITY 20
 azd up
 ```
 
+### Chat Configuration
+
+Edit `src/ChatApp/appsettings.json` to customize the chat behavior:
+
+```json
+{
+  "Chat": {
+    "SystemPrompt": "You are a helpful assistant. Keep responses concise and friendly.",
+    "MaxConversationMessages": 20
+  }
+}
+```
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `SystemPrompt` | Instructions given to the AI model | See above |
+| `MaxConversationMessages` | Max messages kept in conversation history | `20` |
+
 ## Project Structure
 
 ```
 ├── azure.yaml              # AZD configuration
+├── LICENSE                 # MIT License
 ├── infra/
 │   ├── main.bicep          # Main orchestration
 │   ├── main.parameters.json
@@ -92,9 +116,10 @@ azd up
 │       └── app-service.bicep   # App Service + VNet integration
 └── src/
     └── ChatApp/            # Blazor Server application
-        ├── Components/
-        ├── Services/
-        └── wwwroot/
+        ├── Components/     # Razor components
+        ├── Models/         # Data models
+        ├── Services/       # Chat service with AI integration
+        └── wwwroot/        # Static assets + JS interop
 ```
 
 ## Security
