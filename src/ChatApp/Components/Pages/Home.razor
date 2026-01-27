@@ -13,8 +13,8 @@
         <div class="header-top">
             <h1>Foundry Chat</h1>
             <div class="header-actions">
-                <button class="settings-btn" @onclick="ToggleSettings" title="Connection Settings">
-                    ⚙️
+                <button class="settings-btn" @onclick="ToggleSettings" title="Change Foundry endpoint or model deployment">
+                    ⚙️ Settings
                 </button>
                 @if (_messages.Count > 0)
                 {
@@ -63,6 +63,10 @@
         <div class="service-info">
             <span class="info-item" title="AI Endpoint">🌐 @(string.IsNullOrEmpty(_endpoint) ? "Not configured" : _endpoint)</span>
             <span class="info-item" title="Model Deployment">🤖 @_modelDeployment</span>
+        </div>
+        
+        <div class="app-description">
+            Test and validate your Foundry connection. Use <strong>Settings</strong> to connect to a different endpoint or model.
         </div>
     </header>
 
