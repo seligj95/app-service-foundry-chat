@@ -167,16 +167,20 @@ html, body {
 }
 
 .app-description {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
     font-size: 0.8rem;
-    opacity: 0.9;
-    line-height: 1.4;
+    opacity: 0.95;
+    line-height: 1.5;
 }
 
 .app-description strong {
     font-weight: 600;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 1px 6px;
+    border-radius: 4px;
 }
 
 .error-banner {
