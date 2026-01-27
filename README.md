@@ -37,6 +37,7 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
   - Configurable system prompt
   - Token usage metrics per response
   - Connection health check
+  - **In-app connection settings** to test different Foundry resources
   - Responsive UI with keyboard shortcuts
 
 ## Prerequisites
@@ -65,13 +66,32 @@ A one-click Azure Developer CLI (azd) template that deploys Azure App Service wi
 
 ## Configuration
 
-### Environment Variables
+### In-App Connection Settings
+
+The chat application includes a **Connection Settings** panel that allows you to change the Foundry endpoint and model deployment without redeploying.
+
+**To access the settings:**
+1. Click the **⚙️ gear icon** in the top-right corner of the chat header
+2. Enter a different **Foundry Endpoint** URL and/or **Model Deployment** name
+3. Click **Apply & Connect** to test the new configuration
+
+**Use cases:**
+- Test the same app against different Foundry resources
+- Switch between model deployments (e.g., `gpt-4o` vs `gpt-4o-mini`)
+- Connect to a Foundry resource in a different region
+- Demo the app without deploying infrastructure (enter any accessible endpoint)
+
+> **Note:** If no default endpoint is configured via app settings, the settings panel will appear automatically on first load.
+
+### Environment Variables (Deployment Defaults)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `MODEL_NAME` | AI model to deploy | `gpt-4o` |
 | `MODEL_VERSION` | Model version | `2024-08-06` |
 | `MODEL_CAPACITY` | Deployment capacity (TPM) | `10` |
+
+These environment variables set the **default** connection. Users can override them at runtime using the in-app settings panel.
 
 ### Customization
 

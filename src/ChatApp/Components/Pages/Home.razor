@@ -13,6 +13,9 @@
         <div class="header-top">
             <h1>Foundry Chat</h1>
             <div class="header-actions">
+                <button class="settings-btn" @onclick="ToggleSettings" title="Connection Settings">
+                    ⚙️
+                </button>
                 @if (_messages.Count > 0)
                 {
                     <button class="clear-btn" @onclick="ClearChat" title="Clear chat">
@@ -23,18 +26,18 @@
         </div>
         
         <div class="status-row">
-            <div class="status @(ChatService.IsConfigured ? "connected" : "disconnected")">
-                @if (ChatService.IsConfigured)
+            <div class="status @(_isConfigured ? "connected" : "disconnected")">
+                @if (_isConfigured)
                 {
                     <span>✓ Connected</span>
                 }
                 else
                 {
-                    <span>✗ Not Connected</span>
+                    <span>⚠ Configure Connection</span>
                 }
             </div>
             
-            @if (ChatService.IsConfigured)
+            @if (_isConfigured)
             {
                 <button class="ping-btn @(_isPinging ? "pinging" : "") @(_pingStatus)" @onclick="RunHealthCheck" disabled="@_isPinging">
                     @if (_isPinging)
@@ -58,20 +61,69 @@
         </div>
 
         <div class="service-info">
-            <span class="info-item" title="AI Endpoint">🌐 @_serviceInfo.Endpoint</span>
-            <span class="info-item" title="Model Deployment">🤖 @_serviceInfo.ModelDeployment</span>
+            <span class="info-item" title="AI Endpoint">🌐 @(string.IsNullOrEmpty(_endpoint) ? "Not configured" : _endpoint)</span>
+            <span class="info-item" title="Model Deployment">🤖 @_modelDeployment</span>
         </div>
     </header>
 
-    @if (!ChatService.IsConfigured)
+    @if (_showSettings)
     {
-        <div class="error-banner">
-            <strong>Configuration Error:</strong> @ChatService.ConfigurationError
+        <div class="settings-panel">
+            <h3>Connection Settings</h3>
+            <p class="settings-hint">
+                @if (_hasDefaultConfig)
+                {
+                    <span>Default values loaded from app settings. Override below to test with a different resource.</span>
+                }
+                else
+                {
+                    <span>No default configuration found. Enter your Foundry connection details.</span>
+                }
+            </p>
+            
+            <div class="settings-form">
+                <div class="form-group">
+                    <label for="endpoint">Foundry Endpoint</label>
+                    <input 
+                        id="endpoint"
+                        type="text" 
+                        @bind="_endpoint" 
+                        placeholder="https://your-resource.cognitiveservices.azure.com/"
+                        class="form-input" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="model">Model Deployment Name</label>
+                    <input 
+                        id="model"
+                        type="text" 
+                        @bind="_modelDeployment" 
+                        placeholder="gpt-4o"
+                        class="form-input" />
+                </div>
+                
+                <div class="settings-actions">
+                    @if (_hasDefaultConfig)
+                    {
+                        <button class="btn-secondary" @onclick="ResetToDefaults">Reset to Defaults</button>
+                    }
+                    <button class="btn-primary" @onclick="ApplySettings" disabled="@(!CanApplySettings)">
+                        Apply & Connect
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (!_isConfigured && !_showSettings)
+    {
+        <div class="error-banner clickable" @onclick="ToggleSettings">
+            <strong>Setup Required:</strong> Click here or the ⚙️ button to configure your Foundry connection.
         </div>
     }
 
     <div class="messages-container" @ref="_messagesContainer">
-        @if (_messages.Count == 0 && ChatService.IsConfigured)
+        @if (_messages.Count == 0 && _isConfigured)
         {
             <div class="welcome-message">
                 <div class="welcome-icon">💬</div>
@@ -144,13 +196,13 @@
             @bind:after="AutoResizeTextarea"
             @onkeydown="HandleKeyDown"
             placeholder="Type a message..." 
-            disabled="@(!ChatService.IsConfigured || _isLoading)"
+            disabled="@(!_isConfigured || _isLoading)"
             class="message-input"
             rows="1"></textarea>
         <button 
             type="button"
             @onclick="SendMessage"
-            disabled="@(!ChatService.IsConfigured || _isLoading || string.IsNullOrWhiteSpace(_userInput))"
+            disabled="@(!_isConfigured || _isLoading || string.IsNullOrWhiteSpace(_userInput))"
             class="send-button">
             Send
         </button>
@@ -168,13 +220,68 @@
     private long? _lastPingMs;
     private string _pingStatus = ""; // "", "success", "failed"
     private int _sessionTotalTokens;
-    private ServiceInfo _serviceInfo = new("", "", false, null);
     private ElementReference _messagesContainer;
     private ElementReference _textareaRef;
+    
+    // Configuration state
+    private bool _showSettings;
+    private bool _hasDefaultConfig;
+    private string _endpoint = string.Empty;
+    private string _modelDeployment = "gpt-4o";
+    
+    private bool _isConfigured => !string.IsNullOrWhiteSpace(_endpoint) && !string.IsNullOrWhiteSpace(_modelDeployment);
+    private bool CanApplySettings => !string.IsNullOrWhiteSpace(_endpoint) && !string.IsNullOrWhiteSpace(_modelDeployment);
+
+    private ConnectionConfig? GetCurrentConfig() => _isConfigured 
+        ? new ConnectionConfig(_endpoint.Trim(), _modelDeployment.Trim()) 
+        : null;
 
     protected override void OnInitialized()
     {
-        _serviceInfo = ChatService.GetServiceInfo();
+        var defaultConfig = ChatService.GetDefaultConfig();
+        _hasDefaultConfig = defaultConfig != null;
+        
+        if (defaultConfig != null)
+        {
+            _endpoint = defaultConfig.Endpoint;
+            _modelDeployment = defaultConfig.ModelDeployment;
+        }
+        else
+        {
+            _showSettings = true; // Auto-show settings if no defaults
+        }
+    }
+
+    private void ToggleSettings()
+    {
+        _showSettings = !_showSettings;
+    }
+
+    private void ResetToDefaults()
+    {
+        var defaultConfig = ChatService.GetDefaultConfig();
+        if (defaultConfig != null)
+        {
+            _endpoint = defaultConfig.Endpoint;
+            _modelDeployment = defaultConfig.ModelDeployment;
+        }
+    }
+
+    private async Task ApplySettings()
+    {
+        if (!CanApplySettings) return;
+        
+        _showSettings = false;
+        _pingStatus = "";
+        _errorMessage = null;
+        
+        // Clear conversation when config changes
+        _messages.Clear();
+        _sessionTotalTokens = 0;
+        ChatService.ClearConversation(_conversationId);
+        
+        // Auto-test the connection
+        await RunHealthCheck();
     }
 
     private async Task AutoResizeTextarea()
@@ -199,6 +306,9 @@
 
     private async Task RunHealthCheck()
     {
+        var config = GetCurrentConfig();
+        if (config == null) return;
+        
         _isPinging = true;
         _pingStatus = "";
         _errorMessage = null;
@@ -206,7 +316,7 @@
 
         try
         {
-            _lastPingMs = await ChatService.PingAsync(_cts.Token);
+            _lastPingMs = await ChatService.PingAsync(config, _cts.Token);
             _pingStatus = "success";
         }
         catch (OperationCanceledException)
@@ -244,8 +354,11 @@
 
     private async Task SendMessage()
     {
-        if (string.IsNullOrWhiteSpace(_userInput) || _isLoading)
+        if (string.IsNullOrWhiteSpace(_userInput) || _isLoading || !_isConfigured)
             return;
+
+        var config = GetCurrentConfig();
+        if (config == null) return;
 
         var userMessage = _userInput.Trim();
         _userInput = string.Empty;
@@ -258,7 +371,7 @@
 
         try
         {
-            var response = await ChatService.SendMessageAsync(_conversationId, userMessage, _cts.Token);
+            var response = await ChatService.SendMessageAsync(_conversationId, userMessage, config, _cts.Token);
             var metrics = new MessageMetrics(
                 response.PromptTokens,
                 response.CompletionTokens,

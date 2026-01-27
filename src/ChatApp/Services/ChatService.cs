@@ -22,6 +22,11 @@ public record ServiceInfo(
     string? ConfigurationError
 );
 
+public record ConnectionConfig(
+    string Endpoint,
+    string ModelDeployment
+);
+
 public class ChatSettings
 {
     public string SystemPrompt { get; set; } = "You are a helpful assistant. Keep responses concise and friendly.";
@@ -30,62 +35,77 @@ public class ChatSettings
 
 public interface IChatService
 {
-    Task<ChatResponse> SendMessageAsync(string conversationId, string userMessage, CancellationToken cancellationToken = default);
-    Task<long> PingAsync(CancellationToken cancellationToken = default);
+    Task<ChatResponse> SendMessageAsync(string conversationId, string userMessage, ConnectionConfig? config = null, CancellationToken cancellationToken = default);
+    Task<long> PingAsync(ConnectionConfig? config = null, CancellationToken cancellationToken = default);
     ServiceInfo GetServiceInfo();
+    ConnectionConfig? GetDefaultConfig();
     void ClearConversation(string conversationId);
-    bool IsConfigured { get; }
-    string? ConfigurationError { get; }
 }
 
 public class ChatService : IChatService
 {
-    private readonly ChatClient? _chatClient;
     private readonly ILogger<ChatService> _logger;
-    private readonly string? _configurationError;
-    private readonly string _endpoint;
-    private readonly string _modelDeployment;
+    private readonly DefaultAzureCredential _credential;
     private readonly ChatSettings _settings;
+    private readonly string? _defaultEndpoint;
+    private readonly string? _defaultModelDeployment;
     private readonly Dictionary<string, List<ChatMessage>> _conversations = new();
+    private readonly Dictionary<string, ChatClient> _clientCache = new();
     private readonly object _lock = new();
-
-    public bool IsConfigured => _chatClient != null;
-    public string? ConfigurationError => _configurationError;
 
     public ChatService(ILogger<ChatService> logger, DefaultAzureCredential credential, IOptions<ChatSettings> settings)
     {
         _logger = logger;
+        _credential = credential;
         _settings = settings.Value;
-        _endpoint = Environment.GetEnvironmentVariable("AZURE_AI_FOUNDRY_ENDPOINT") ?? "";
-        _modelDeployment = Environment.GetEnvironmentVariable("AZURE_AI_MODEL_DEPLOYMENT") ?? "gpt-4o";
+        _defaultEndpoint = Environment.GetEnvironmentVariable("AZURE_AI_FOUNDRY_ENDPOINT");
+        _defaultModelDeployment = Environment.GetEnvironmentVariable("AZURE_AI_MODEL_DEPLOYMENT");
+        
+        _logger.LogInformation("ChatService initialized. Default endpoint configured: {HasEndpoint}", !string.IsNullOrEmpty(_defaultEndpoint));
+    }
 
-        if (string.IsNullOrEmpty(_endpoint))
-        {
-            _configurationError = "AZURE_AI_FOUNDRY_ENDPOINT environment variable is not set.";
-            _logger.LogError("Configuration error: {Error}", _configurationError);
-            return;
-        }
-
-        try
-        {
-            var azureClient = new AzureOpenAIClient(new Uri(_endpoint), credential);
-            _chatClient = azureClient.GetChatClient(_modelDeployment);
-            _logger.LogInformation("ChatService initialized successfully with endpoint: {Endpoint}", _endpoint);
-        }
-        catch (Exception ex)
-        {
-            _configurationError = $"Failed to initialize AI client: {ex.Message}";
-            _logger.LogError(ex, "Failed to initialize ChatService");
-        }
+    public ConnectionConfig? GetDefaultConfig()
+    {
+        if (string.IsNullOrEmpty(_defaultEndpoint))
+            return null;
+            
+        return new ConnectionConfig(
+            _defaultEndpoint,
+            _defaultModelDeployment ?? "gpt-4o"
+        );
     }
 
     public ServiceInfo GetServiceInfo()
     {
+        var defaultConfig = GetDefaultConfig();
         return new ServiceInfo(
-            string.IsNullOrEmpty(_endpoint) ? "Not configured" : _endpoint, 
-            _modelDeployment, 
-            IsConfigured, 
-            _configurationError);
+            defaultConfig?.Endpoint ?? "Not configured",
+            defaultConfig?.ModelDeployment ?? "gpt-4o",
+            defaultConfig != null,
+            defaultConfig == null ? "No default endpoint configured. Enter connection details below." : null
+        );
+    }
+
+    private ChatClient GetOrCreateClient(ConnectionConfig config)
+    {
+        var cacheKey = $"{config.Endpoint}|{config.ModelDeployment}";
+        
+        lock (_lock)
+        {
+            if (_clientCache.TryGetValue(cacheKey, out var cachedClient))
+            {
+                return cachedClient;
+            }
+
+            var azureClient = new AzureOpenAIClient(new Uri(config.Endpoint), _credential);
+            var chatClient = azureClient.GetChatClient(config.ModelDeployment);
+            _clientCache[cacheKey] = chatClient;
+            
+            _logger.LogInformation("Created new ChatClient for endpoint: {Endpoint}, model: {Model}", 
+                config.Endpoint, config.ModelDeployment);
+            
+            return chatClient;
+        }
     }
 
     public void ClearConversation(string conversationId)
@@ -97,13 +117,15 @@ public class ChatService : IChatService
         _logger.LogInformation("Cleared conversation: {ConversationId}", conversationId);
     }
 
-    public async Task<long> PingAsync(CancellationToken cancellationToken = default)
+    public async Task<long> PingAsync(ConnectionConfig? config = null, CancellationToken cancellationToken = default)
     {
-        if (_chatClient == null)
+        var effectiveConfig = config ?? GetDefaultConfig();
+        if (effectiveConfig == null)
         {
-            throw new InvalidOperationException(_configurationError ?? "Chat client is not configured.");
+            throw new InvalidOperationException("No connection configuration provided and no default configured.");
         }
 
+        var chatClient = GetOrCreateClient(effectiveConfig);
         var sw = Stopwatch.StartNew();
         
         try
@@ -118,26 +140,29 @@ public class ChatService : IChatService
                 MaxOutputTokenCount = 1
             };
 
-            await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
+            await chatClient.CompleteChatAsync(messages, options, cancellationToken);
             sw.Stop();
             
-            _logger.LogInformation("Ping successful. Latency: {Latency}ms", sw.ElapsedMilliseconds);
+            _logger.LogInformation("Ping successful. Endpoint: {Endpoint}, Latency: {Latency}ms", 
+                effectiveConfig.Endpoint, sw.ElapsedMilliseconds);
             return sw.ElapsedMilliseconds;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ping failed");
+            _logger.LogError(ex, "Ping failed for endpoint: {Endpoint}", effectiveConfig.Endpoint);
             throw;
         }
     }
 
-    public async Task<ChatResponse> SendMessageAsync(string conversationId, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<ChatResponse> SendMessageAsync(string conversationId, string userMessage, ConnectionConfig? config = null, CancellationToken cancellationToken = default)
     {
-        if (_chatClient == null)
+        var effectiveConfig = config ?? GetDefaultConfig();
+        if (effectiveConfig == null)
         {
-            throw new InvalidOperationException(_configurationError ?? "Chat client is not configured.");
+            throw new InvalidOperationException("No connection configuration provided and no default configured.");
         }
 
+        var chatClient = GetOrCreateClient(effectiveConfig);
         var sw = Stopwatch.StartNew();
 
         try
@@ -169,7 +194,7 @@ public class ChatService : IChatService
                 messagesToSend = TruncateConversation(conversationHistory);
             }
 
-            var response = await _chatClient.CompleteChatAsync(messagesToSend, cancellationToken: cancellationToken);
+            var response = await chatClient.CompleteChatAsync(messagesToSend, cancellationToken: cancellationToken);
             sw.Stop();
 
             var content = response.Value.Content.FirstOrDefault()?.Text ?? "No response received.";
@@ -182,8 +207,9 @@ public class ChatService : IChatService
             }
             
             _logger.LogInformation(
-                "Chat completion successful. ConversationId: {ConversationId}, Tokens: {Prompt}/{Completion}/{Total}, Latency: {Latency}ms", 
+                "Chat completion successful. ConversationId: {ConversationId}, Endpoint: {Endpoint}, Tokens: {Prompt}/{Completion}/{Total}, Latency: {Latency}ms", 
                 conversationId,
+                effectiveConfig.Endpoint,
                 usage?.InputTokenCount, 
                 usage?.OutputTokenCount, 
                 usage?.TotalTokenCount,
@@ -195,12 +221,13 @@ public class ChatService : IChatService
                 CompletionTokens: usage?.OutputTokenCount ?? 0,
                 TotalTokens: usage?.TotalTokenCount ?? 0,
                 ResponseTimeMs: sw.ElapsedMilliseconds,
-                Model: _modelDeployment
+                Model: effectiveConfig.ModelDeployment
             );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during chat completion for conversation: {ConversationId}", conversationId);
+            _logger.LogError(ex, "Error during chat completion for conversation: {ConversationId}, endpoint: {Endpoint}", 
+                conversationId, effectiveConfig.Endpoint);
             throw;
         }
     }
