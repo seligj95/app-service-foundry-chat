@@ -46,7 +46,7 @@ resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     networkAcls: {
       defaultAction: 'Deny'
     }
-    disableLocalAuth: false
+    disableLocalAuth: true
     allowProjectManagement: true
   }
 }
