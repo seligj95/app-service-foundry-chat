@@ -68,3 +68,8 @@ Desktop.ini
 
 # Plan files
 *.prompt.md
+
+# Other files
+*spec.md
+*spec.docx
+*easy-agent.md

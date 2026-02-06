@@ -1,0 +1,22 @@
+{
+  "name": "Azure App Service + Foundry Chat Starter",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-10.0",
+  "features": {
+    "ghcr.io/azure/azure-dev/azd:latest": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.azure-dev",
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit"
+      ]
+    }
+  },
+  "forwardPorts": [
+    5000,
+    5001
+  ],
+  "postCreateCommand": "dotnet restore src/ChatApp/ChatApp.csproj",
+  "remoteUser": "vscode"
+}
