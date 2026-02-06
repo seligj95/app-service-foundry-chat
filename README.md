@@ -9,8 +9,6 @@ Sample application code is included in this project. You can use or modify this 
 
 [Features](#features) • [Getting Started](#getting-started) • [Guidance](#guidance) • [Resources](#resources)
 
-![Chat App Screenshot](docs/images/chat-screenshot.png)
-
 ## Important Security Notice
 
 This template, the application code and configuration it contains, has been built to showcase Microsoft Azure specific services and tools. We strongly advise our customers not to make this code part of their production environments without implementing or enabling additional security features. For a more comprehensive list of best practices and security recommendations for Intelligent Applications, visit our [official documentation](https://learn.microsoft.com/azure/security/fundamentals/overview).
